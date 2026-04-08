@@ -5,7 +5,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai.types import Content, Part
 
-# ---------- Define monitoring functions (these will become tools) ----------
+# ---------- Tools ----------
 def get_cpu_usage() -> str:
     """Returns current CPU usage percentage."""
     return f"CPU usage: {psutil.cpu_percent(interval=1)}%"
@@ -37,7 +37,7 @@ def get_top_processes(n: int = 5) -> str:
         result += f"PID {p['pid']}: {p['name']} - {p['cpu_percent']}%\n"
     return result
 
-# ---------- Create agent with tools ----------
+# ---------- Agent ----------
 agent = LlmAgent(
     name="SystemHealthMonitor",
     model="gemini-2.5-flash",
@@ -46,9 +46,10 @@ agent = LlmAgent(
         "Use the provided tools to answer user questions about CPU, RAM, and processes. "
         "When asked about system health, call the appropriate tools and present the data clearly."
     ),
-    tools=[get_cpu_usage, get_ram_usage, get_top_processes],  # Just pass the functions
+    tools=[get_cpu_usage, get_ram_usage, get_top_processes],
 )
 
+# ---------- Session,State & Runner ----------
 session_service = InMemorySessionService()
 runner = Runner(
     app_name="system_health_app",
