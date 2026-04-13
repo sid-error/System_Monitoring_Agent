@@ -1,120 +1,79 @@
 import os
-import psutil
-import time
+import asyncio
+from dotenv import load_dotenv
+
+load_dotenv()
 from google.adk.agents import LlmAgent
 from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
+from google.adk.sessions.database_session_service import DatabaseSessionService
+from google.adk.tools.mcp_tool import McpToolset
 from google.genai.types import Content, Part
+from mcp import StdioServerParameters
 
-# ---------- Tools ----------
-def get_cpu_usage() -> str:
-    return f"CPU usage: {psutil.cpu_percent(interval=1)}%"
+script_dir = os.path.dirname(os.path.abspath(__file__))
+server_path = os.path.join(script_dir, "health_server.py")
 
-def get_ram_usage() -> str:
-    mem = psutil.virtual_memory()
-    return (f"RAM - Total: {mem.total // (1024**3)} GB, "
-            f"Used: {mem.used // (1024**3)} GB, "
-            f"Free: {mem.free // (1024**3)} GB, "
-            f"Usage: {mem.percent}%")
+toolset = McpToolset(
+    connection_params=StdioServerParameters(
+        command="python",
+        args=[server_path]
+    )
+)
 
-def get_disk_usage(path: str = "/") -> str:
-    """Returns disk usage for a given path (e.g., 'C:' on Windows, '/' on Linux).
-    Args:
-        path: Drive or mount point (e.g., 'C:' or '/')
-    """
-    if os.name == 'nt':
-        if len(path) == 2 and path[1] == ':':
-            path = path + "\\"
-        if path.endswith(':'):
-            path = path + "\\"
-    try:
-        usage = psutil.disk_usage(path)
-        return (f"Disk {path}: Total: {usage.total // (1024**3)} GB, "
-                f"Used: {usage.used // (1024**3)} GB, "
-                f"Free: {usage.free // (1024**3)} GB, "
-                f"Usage: {usage.percent}%")
-    except FileNotFoundError:
-        return f"Error: Drive or path '{path}' not found. Please specify an existing drive (e.g., 'C:' on Windows)."
-    except PermissionError:
-        return f"Error: Permission denied for path '{path}'."
-    except Exception as e:
-        return f"Error checking disk usage: {str(e)}"
-
-def get_top_processes(n: int = 5) -> str:
-    processes = []
-    for proc in psutil.process_iter(['pid', 'name']):
-        try:
-            proc.cpu_percent(interval=0)
-            processes.append(proc)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-    time.sleep(0.5)
-    proc_data = []
-    for proc in processes:
-        try:
-            if proc.info['name'] == "System Idle Process":
-                continue
-            cpu_percent = proc.cpu_percent(interval=0)
-            proc_data.append({
-                'pid': proc.info['pid'],
-                'name': proc.info['name'] or 'Unknown',
-                'cpu_percent': cpu_percent
-            })
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-    proc_data.sort(key=lambda x: x['cpu_percent'], reverse=True)
-    top_n = proc_data[:n]
-    result = f"Top {n} processes by CPU usage (over 0.5s):\n"
-    for p in top_n:
-        result += f"PID {p['pid']}: {p['name']} - {p['cpu_percent']:.1f}%\n"
-    return result
-
-# ---------- Agent ----------
 agent = LlmAgent(
     name="SystemHealthMonitor",
-    model="gemini-2.5-flash",
+    model="gemini-3.1-flash-lite-preview",
     instruction=(
         "You are a system health monitoring assistant. "
         "Use the provided tools to answer questions about CPU, RAM, disk usage, and top processes. "
-        "For disk usage, if the user doesn't specify a drive, ask which drive (e.g., C: on Windows)."
+        "For disk usage, if the user doesn't specify a drive, ask which drive (e.g., C: on Windows). "
+        "You can look up specific processes by name or PID using the provided tools. "
+        "Always format tabulated data, such as process lists or statistics, as proper Markdown tables."
     ),
-    tools=[get_cpu_usage, get_ram_usage, get_disk_usage, get_top_processes],
+    tools=[toolset],
 )
 
-session_service = InMemorySessionService()
+db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/health_db")
+session_service = DatabaseSessionService(db_url)
+
 runner = Runner(
     app_name="system_health_app",
     agent=agent,
     session_service=session_service,
 )
 
-# ---------- Interactive Main ----------
 async def main():
-    session = await session_service.create_session(
-        app_name="system_health_app",
-        user_id="admin",
-    )
+    print(f"Connecting to database at {db_url}...")
+    session = await session_service.get_session(app_name="system_health_app", user_id="admin", session_id="cli_session")
+    if not session:
+        session = await session_service.create_session(app_name="system_health_app", user_id="admin", session_id="cli_session")
     print("System Health Agent ready. Type 'quit' to exit.\n")
     while True:
-        user_input = input("You: ").strip()
+        try:
+            user_input = input("You: ").strip()
+        except EOFError:
+            break
         if user_input.lower() in ['quit', 'exit', 'q']:
             break
         user_message = Content(
             role="user",
             parts=[Part(text=user_input)]
         )
-        print("Agent: ", end="")
-        async for event in runner.run_async(
-            session_id=session.id,
-            user_id="admin",
-            new_message=user_message,
-        ):
-            if event.content and event.content.parts:
-                for part in event.content.parts:
-                    if part.text:
-                        print(part.text, end="", flush=True)
-        print()
+        try:
+            print("Agent: ", end="")
+            async for event in runner.run_async(
+                session_id=session.id,
+                user_id="admin",
+                new_message=user_message,
+            ):
+                if event.content and event.content.parts:
+                    for part in event.content.parts:
+                        if part.text:
+                            print(part.text, end="", flush=True)
+            print()
+        except Exception as e:
+            print(f"\n[Error communicating]: {e}")
+            print("Please try your prompt again.")
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
