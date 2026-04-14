@@ -8,13 +8,18 @@ from google.adk.runners import Runner
 from google.adk.sessions.database_session_service import DatabaseSessionService
 from google.adk.tools.mcp_tool import McpToolset
 from google.genai.types import Content, Part
-from mcp import StdioServerParameters
+from mcp.client.stdio import StdioServerParameters
+
+try:
+    from mcp.client.stdio import StdioConnectionParams
+except ImportError:
+    StdioConnectionParams = StdioServerParameters
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 server_path = os.path.join(script_dir, "health_server.py")
 
 toolset = McpToolset(
-    connection_params=StdioServerParameters(
+    connection_params=StdioConnectionParams(
         command="python",
         args=[server_path]
     )
@@ -22,7 +27,7 @@ toolset = McpToolset(
 
 agent = LlmAgent(
     name="SystemHealthMonitor",
-    model="gemini-3.1-flash-lite-preview",
+    model="gemini-2.5-flash-lite",
     instruction=(
         "You are a system health monitoring assistant. "
         "Use the provided tools to answer questions about CPU, RAM, disk usage, and top processes. "

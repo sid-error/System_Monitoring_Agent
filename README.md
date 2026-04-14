@@ -20,7 +20,7 @@ Initialize your virtual environment and install the required dependencies (now e
 ```bash
 python -m venv venv
 venv\Scripts\activate      # For Windows
-# source venv/bin/activate # For Mac/Linux
+source venv/bin/activate # For Mac/Linux
 
 pip install -r requirements.txt
 ```
@@ -39,12 +39,12 @@ Before the agent can store memories, it needs a database and tables.
 
 ## Testing & Verifying the Application
 
-### 1. The Streamlit Web UI
-To talk to the Google ADK + MCP monitoring agent, spin up the server:
+### 1. The Prefab UI Web Interface
+To talk to the Google ADK + MCP monitoring agent, spin up the new generative server:
 ```bash
-python -m streamlit run ui.py
+prefab serve prefab_app.py
 ```
-This triggers your browser at `http://localhost:8501`. 
+This triggers your browser internally (usually at `http://127.0.0.1:5175`). 
 **Verification**: Try typing prompts like `"what are top 10 processes"` followed by `"ram usage?"`. The database and logic loop are perfectly linked, giving accurate formatted responses without crashing.
 
 ### 2. The Context / State Tracker
