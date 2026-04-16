@@ -1,6 +1,6 @@
 # System Monitoring Agent
 
-A deterministic AI agent powered by Google ADK + FastMCP to monitor your system health with interactive charts and tables natively. 
+A powerful Hybrid AI routing agent powered by **Google ADK + FastMCP** and **Gemini**. It intelligently routes complex natural language queries to the LLM for deep reasoning, while falling back gracefully to a deterministic algorithm for offline quick-action system health diagnostic tracking. 
 
 ## Features
 - **Interactive Interfaces**: Choose between a generative UI dashboard powered by **Prefab UI** or a clean, metric-focused **Streamlit Dashboard**.
@@ -60,6 +60,6 @@ Once running, open `http://127.0.0.1:5175` in your browser.
 ## Project Structure
 - `streamlit_app.py`: The robust Streamlit dashboard front-end.
 - `prefab_app.py`: The Generative AI front-end (FastMCP + Prefab UI).
-- `health_agent.py`: The deterministic ADK agent router and session controller.
+- `health_agent.py`: The Hybrid Router proxy, utilizing Google Gemini (`LlmAgent`) with deterministic fallbacks (`HealthBaseAgent`).
 - `health_server.py`: The MCP standard server extracting active system telemetry.
 - `check_db.py`: Utility to audit stored chat context in PostgreSQL.

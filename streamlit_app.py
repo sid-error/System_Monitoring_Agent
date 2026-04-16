@@ -73,40 +73,50 @@ def render_content(content):
                         st.info("Altair is required to view the pie charts.")
 
 
+# Async Background Thread architecture for cross-thread sync proxying
+@st.cache_resource
+def get_async_executor():
+    import threading
+    loop = asyncio.new_event_loop()
+    def _start_loop(l):
+        asyncio.set_event_loop(l)
+        l.run_forever()
+    t = threading.Thread(target=_start_loop, args=(loop,), daemon=True)
+    t.start()
+    return loop
+
+_bg_loop = get_async_executor()
+
+def run_async(coroutine):
+    future = asyncio.run_coroutine_threadsafe(coroutine, _bg_loop)
+    return future.result()
+
 # Use st.cache_resource to initialize the ADK runner and session service 
-# lazily to avoid event-loop binding issues on module level.
 @st.cache_resource
 def get_runner():
-    from health_agent import HealthBaseAgent, server_path
+    from health_agent import HybridHealthAgent, server_path
     from google.adk.runners import Runner
     
-    # We use InMemorySessionService or DatabaseSessionService here.
-    # We'll use InMemory so we don't encounter asyncpg loop reuse issues when
-    # Streamlit re-executes the script in different threads.
-    from google.adk.sessions import InMemorySessionService
+    # Using Database for persistent memory capability!
+    from google.adk.sessions.database_session_service import DatabaseSessionService
+    from dotenv import load_dotenv
+    load_dotenv()
     
-    agent = HealthBaseAgent(
+    agent = HybridHealthAgent(
         name="SystemHealthMonitor",
-        description="Deterministic system monitoring agent.",
+        description="Hybrid system monitoring agent.",
         server_path=server_path
     )
     
-    session_service = InMemorySessionService()
+    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/health_db")
+    session_service = DatabaseSessionService(db_url)
+    
     runner = Runner(
         app_name="system_health_app",
         agent=agent,
         session_service=session_service,
     )
     return runner
-
-# Async Helper with fresh loops
-def run_async(coroutine):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coroutine)
-    finally:
-        loop.close()
 
 # Start
 st.set_page_config(page_title="System Monitor Dashboard (Streamlit)", layout="wide")
@@ -123,10 +133,10 @@ def init_session():
             session = await runner.session_service.create_session(app_name=app_name, user_id=user_id, session_id=session_id)
             
         history = []
-        if hasattr(session, 'history') and session.history:
-            for msg in session.history:
-                text = "".join(p.text for p in msg.parts if p.text)
-                if msg.role == "user":
+        if hasattr(session, 'events') and session.events:
+            for evt in session.events:
+                text = "".join(p.text for p in evt.content.parts if p.text)
+                if evt.author == "user":
                     history.append({"role": "user", "content": text})
                 else:
                     history.append({"role": "assistant", "content": text})
@@ -171,8 +181,8 @@ with col1:
     if st.button("Lookup Process", use_container_width=True):
         if process_lookup_type == "PID" and process_val:
             st.session_state.queued_prompt = f"pid {process_val}"
-        elif process_val:
-            st.session_state.queued_prompt = process_val
+        elif process_lookup_type == "Name" and process_val:
+            st.session_state.queued_prompt = f"name {process_val}"
 
 with col2:
     st.subheader("Interactive Terminal")
@@ -210,6 +220,7 @@ with col2:
                             for part in event.content.parts:
                                 if part.text:
                                     res += part.text
+                    
                     return res
                 
                 with st.spinner("Executing command..."):
