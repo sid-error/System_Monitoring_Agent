@@ -1,57 +1,65 @@
 # System Monitoring Agent
 
-A conversational system-monitoring agent powered by Google ADK, MCP, and Gemini. It features a continuous Streamlit-based web UI to seamlessly trace and query your computer's health (CPU, RAM, Disk formatting to Markdown) while securely keeping track of the chat context using a locally hosted PostgreSQL database.
+A deterministic AI agent powered by Google ADK + FastMCP to monitor your system health with interactive charts and tables natively. 
+
+## Features
+- **Interactive Interfaces**: Choose between a generative UI dashboard powered by **Prefab UI** or a clean, metric-focused **Streamlit Dashboard**.
+- **Instant Diagnostics**: Ask natural questions or click quick-action buttons to query CPU, RAM, Disk, and Running Processes.
+- **Process Lookup**: Zero-in on specific processes using PID or Name-based fuzzy search.
+- **Backend-Driven**: All system telemetry visualization logic securely resides strictly in MCP tools.
+- **Persistence**: Chat history is stored seamlessly in a PostgreSQL database layout.
 
 ## Prerequisites
-- Python 3.9+
-- PostgreSQL server instance running locally
+- **Python 3.10+**
+- **PostgreSQL**: Running locally or accessible via URI.
+- **Google Gemini API Key**: Set in `.env`.
 
-## Quick Start Setup
-
-### 1. Environment Variables
-You must securely configure your keys before running. We have provided an example template:
-```bash
-cp .env.example .env
-```
-Open `.env`, fill in your Google and Gemini API keys, and replace `<YOUR_POSTGRES_PASSWORD>` with your local PostgreSQL password.
-
-### 2. Installations
-Initialize your virtual environment and install the required dependencies (now explicitly tracked in `requirements.txt`):
-```bash
-python -m venv venv
-venv\Scripts\activate      # For Windows
-source venv/bin/activate # For Mac/Linux
-
-pip install -r requirements.txt
-```
-
-### 3. PostgreSQL Database Initialization
-Before the agent can store memories, it needs a database and tables.
-1. **Create the Base Database**:
-   *(Make sure to temporarily add your postgres password inside the placeholder inside `create_db.py` before running this!).*
+## Setup
+1. **Clone the repo** and navigate to the directory.
+2. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Configure environment**:
+   Make sure you have a `.env` file configured:
+   ```text
+   GEMINI_API_KEY=your_key_here
+   DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/health_db
+   ```
+4. **Initialize Database** (If using Prefab/PostgreSQL persistence):
    ```bash
    python create_db.py
-   ```
-2. **Initialize Tables (Events / Sessions)**:
-   ```bash
    python init_db.py
    ```
 
-## Testing & Verifying the Application
+## Usage
 
-### 1. The Prefab UI Web Interface
-To talk to the Google ADK + MCP monitoring agent, spin up the new generative server:
+### Option 1: Streamlit Dashboard (Recommended)
+This is a sleek, multi-column dashboard with integrated process filtering and quick-diagnostics rendering.
+
 ```bash
-prefab serve prefab_app.py
+streamlit run streamlit_app.py
 ```
-This triggers your browser internally (usually at `http://127.0.0.1:5175`). 
-**Verification**: Try typing prompts like `"what are top 10 processes"` followed by `"ram usage?"`. The database and logic loop are perfectly linked, giving accurate formatted responses without crashing.
+*Note: This will automatically launch an interface in your default web browser.*
 
-### 2. The Context / State Tracker
-We built an exclusive python script `check_db.py` to directly audit PostgreSQL without needing SQL GUIs. It cleanly dumps your Session variables and Chat Context stored by the ADK. 
+### Option 2: Prefab UI 
+Launch the agent as an interactive AI chat interface using `prefab`.
 
-Run it in your terminal while the Streamlit server is either running or offline:
-```bash
-python check_db.py
+**PowerShell (Windows):**
+```powershell
+$env:PYTHONIOENCODING="utf-8" ; prefab serve prefab_app.py
 ```
-**Verification**: It prints your active Streamlit sessions sequentially and shows the raw conversational context the Agent remembers.
+
+**Command Prompt (cmd):**
+```cmd
+set PYTHONIOENCODING=utf-8 && prefab serve prefab_app.py
+```
+
+Once running, open `http://127.0.0.1:5175` in your browser.
+
+## Project Structure
+- `streamlit_app.py`: The robust Streamlit dashboard front-end.
+- `prefab_app.py`: The Generative AI front-end (FastMCP + Prefab UI).
+- `health_agent.py`: The deterministic ADK agent router and session controller.
+- `health_server.py`: The MCP standard server extracting active system telemetry.
+- `check_db.py`: Utility to audit stored chat context in PostgreSQL.
